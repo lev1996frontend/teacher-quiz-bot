@@ -441,34 +441,24 @@ bot.catch((err, ctx) => {
 });
 
 const express = require("express");
-
 const PORT = process.env.PORT || 3000;
-const WEBHOOK_URL = process.env.WEBHOOK_URL || ""; // например: https://teacher-quiz-bot.onrender.com
+const WEBHOOK_URL = (process.env.WEBHOOK_URL || "").replace(/\/$/, "");
 const HOOK_PATH =
-  "/telegram/" + Buffer.from(BOT_TOKEN).toString("hex").slice(0, 12); // «секретный» путь
+  "/telegram/" + Buffer.from(BOT_TOKEN).toString("hex").slice(0, 12);
 
 (async () => {
   if (WEBHOOK_URL) {
-    // --- режим вебхука ---
     const app = express();
     app.use(express.json());
-
-    // Подключаем обработчик Telegraf
     app.post(HOOK_PATH, (req, res) => bot.webhookCallback(HOOK_PATH)(req, res));
-
-    // Регистрируем вебхук у Telegram
-    await bot.telegram.setWebhook(WEBHOOK_URL + HOOK_PATH);
-
     app.get("/", (_, res) => res.send("OK"));
-    app.listen(PORT, () => {
-      console.log(
-        `Webhook mode: listening on ${PORT}, hook: ${WEBHOOK_URL + HOOK_PATH}`
-      );
-    });
+    await bot.telegram.setWebhook(WEBHOOK_URL + HOOK_PATH);
+    app.listen(PORT, () =>
+      console.log(`Webhook mode: ${WEBHOOK_URL}${HOOK_PATH}`)
+    );
   } else {
-    // --- режим пуллинга (как сейчас) ---
     await bot.launch();
-    console.log("Polling mode: bot launched. Ctrl+C to stop.");
+    console.log("Polling mode: bot launched.");
   }
 })();
 
