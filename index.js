@@ -45,7 +45,6 @@ bot.use(
 // Команды в меню Telegram
 bot.telegram.setMyCommands([
   { command: "start", description: "Начать" },
-  { command: "menu", description: "Меню" },
   { command: "restart", description: "Перезапустить викторину" },
 ]);
 
@@ -204,8 +203,18 @@ async function showWelcome(ctx) {
   await ctx.reply(
     `Ангелина, Вы любите розы!? Сегодня — не просто день, а повод устроить лёгкую литературную шалость.
 Тема: ${subject}.
-В конце — главный вопрос про ... Готова?`,
+Зима близко, так что не тормозим — жмём «Старт» и погнали!`,
     Markup.inlineKeyboard([[Markup.button.callback("Старт", "start")]])
+  );
+  await ctx.reply(
+    [
+      "Как это работает (очень просто):",
+      "1) Жми «Старт» и устраиваем литературный флекс. 💃📚",
+      "2) Клацай любой вариант — много думать вредно! 😉",
+      "3) В финале — главный босс: имя кота. Тут уже нужен правильный ответ. 🐾",
+      "4) Захочешь ещё круг? жми «Перезапустить» — и поехали заново. 🔄",
+      "5) В конце ждёт 🎁",
+    ].join("\n")
   );
 }
 
@@ -257,9 +266,10 @@ async function finish(ctx) {
     lines,
     Markup.inlineKeyboard([
       [Markup.button.callback("Показать сертификаты", "certs")],
-      [Markup.button.callback("Старт", "start")],
-      [Markup.button.callback("Приветствие", "again")],
-      [Markup.button.callback("Меню", "menu")],
+      [
+        Markup.button.callback("Начать", "start"),
+        Markup.button.callback("Перезапустить", "restart"),
+      ],
     ])
   );
 
@@ -293,6 +303,17 @@ async function sendPhotoCertificate(ctx) {
 
 // 2) PDF-сертификат: если есть картинка — делаем из неё полный лист A4; иначе — текстовый PDF
 async function sendPdfCertificate(ctx) {
+  // 1) если есть готовый PDF — шлём его
+  const readyPdf = path.join(__dirname, "assets", "certificate.pdf");
+  if (fs.existsSync(readyPdf)) {
+    await ctx.replyWithDocument(
+      { source: readyPdf, filename: "certificate.pdf" },
+      { caption: "Сертификат (PDF)" }
+    );
+    return;
+  }
+
+  // 2) иначе — твоя текущая логика генерации
   const imgPath = ["certificate.jpg", "certificate.jpeg", "certificate.png"]
     .map((n) => path.join(__dirname, "assets", n))
     .find((p) => fs.existsSync(p));
@@ -300,7 +321,6 @@ async function sendPdfCertificate(ctx) {
   const outPath = path.join(__dirname, "certificate.pdf");
 
   await new Promise((resolve, reject) => {
-    // Если есть изображение — делаем PDF-страницу с ним целиком.
     if (imgPath) {
       const doc = new PDFDocument({ size: "A4", margin: 0 });
       const stream = fs.createWriteStream(outPath);
@@ -308,21 +328,17 @@ async function sendPdfCertificate(ctx) {
       const pageW = doc.page.width;
       const pageH = doc.page.height;
       doc.image(imgPath, 0, 0, { fit: [pageW, pageH] });
-
-      // Небольшая подпись внизу (можно удалить)
       const today = new Date().toLocaleDateString("ru-RU");
       doc
         .fillColor("#4b2b4f")
         .fontSize(10)
         .text(`Для: ${TEACHER_NAME} · Дата: ${today}`, 20, pageH - 30);
-
       doc.end();
       stream.on("finish", resolve);
       stream.on("error", reject);
       return;
     }
 
-    // Фолбэк: аккуратный текстовый PDF
     const doc = new PDFDocument({ size: "A4", margin: 50 });
     const stream = fs.createWriteStream(outPath);
     doc.pipe(stream);
@@ -330,16 +346,14 @@ async function sendPdfCertificate(ctx) {
     doc.moveDown(1);
     doc.fontSize(14).text(`Вручается ${TEACHER_NAME}`, { align: "center" });
     doc.moveDown(0.5);
-    doc.text(
-      `За вдохновение на уроках русского языка и литературы, ` +
-        `за любовь к чтению и умение разговаривать с эпохой через сериалы.`,
-      { align: "center" }
-    );
+    doc.text(`За вдохновение на уроках русского языка и литературы...`, {
+      align: "center",
+    });
     doc.moveDown(1);
-    doc.text(
-      `Пусть кот по имени «${CAT_NAME}» всегда поддерживает атмосферу уюта и тепла.`,
-      { align: "center", oblique: true }
-    );
+    doc.text(`Пусть кот «${CAT_NAME}» поддерживает уют.`, {
+      align: "center",
+      oblique: true,
+    });
     doc.moveDown(2);
     const today = new Date().toLocaleDateString("ru-RU");
     doc.text(`Дата: ${today}`, { align: "right" });
@@ -351,7 +365,10 @@ async function sendPdfCertificate(ctx) {
   });
 
   await ctx.replyWithDocument(
-    { source: outPath, filename: "certificate.pdf" },
+    {
+      source: path.join(__dirname, "certificate.pdf"),
+      filename: "certificate.pdf",
+    },
     { caption: "Сертификат (PDF)" }
   );
 }
@@ -402,6 +419,14 @@ bot.action("again", async (ctx) => {
 bot.action("certs", async (ctx) => {
   await ctx.answerCbQuery();
   await sendCertificates(ctx);
+});
+
+bot.action("restart", async (ctx) => {
+  await ctx.answerCbQuery();
+  ctx.session.step = 0;
+  ctx.session.quiz = getQuestions();
+  await ctx.reply("Перезапускаю викторину! 🔄");
+  await sendQuestion(ctx);
 });
 
 // Ответ на варианты
