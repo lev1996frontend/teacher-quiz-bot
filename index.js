@@ -8,7 +8,6 @@
 const { Telegraf, Markup, session } = require("telegraf");
 const fs = require("fs");
 const path = require("path");
-const PDFDocument = require("pdfkit");
 require("dotenv").config();
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -325,82 +324,19 @@ async function sendPhotoCertificate(ctx) {
   );
 }
 
-// 2) PDF-сертификат: если есть картинка — делаем из неё полный лист A4; иначе — текстовый PDF
-async function sendPdfCertificate(ctx) {
-  // 1) если есть готовый PDF — шлём его
-  const readyPdf = path.join(__dirname, "assets", "certificate.pdf");
-  if (fs.existsSync(readyPdf)) {
-    await ctx.replyWithDocument(
-      { source: readyPdf, filename: "certificate.pdf" },
-      { caption: "Сертификат (PDF)" }
-    );
-    return;
+// === ПРОСТАЯ ОТПРАВКА ГОТОВОГО PDF ===
+async function sendPlainPdf(ctx) {
+  const pdfPath = path.join(__dirname, "assets", "certificate.pdf");
+  if (!fs.existsSync(pdfPath)) {
+    return ctx.reply("Файл assets/certificate.pdf не найден 🙈");
   }
-
-  // 2) иначе — твоя текущая логика генерации
-  const imgPath = ["certificate.jpg", "certificate.jpeg", "certificate.png"]
-    .map((n) => path.join(__dirname, "assets", n))
-    .find((p) => fs.existsSync(p));
-
-  const outPath = path.join(__dirname, "certificate.pdf");
-
-  await new Promise((resolve, reject) => {
-    if (imgPath) {
-      const doc = new PDFDocument({ size: "A4", margin: 0 });
-      const stream = fs.createWriteStream(outPath);
-      doc.pipe(stream);
-      const pageW = doc.page.width;
-      const pageH = doc.page.height;
-      doc.image(imgPath, 0, 0, { fit: [pageW, pageH] });
-      const today = new Date().toLocaleDateString("ru-RU");
-      doc
-        .fillColor("#4b2b4f")
-        .fontSize(10)
-        .text(`Для: ${TEACHER_NAME} · Дата: ${today}`, 20, pageH - 30);
-      doc.end();
-      stream.on("finish", resolve);
-      stream.on("error", reject);
-      return;
-    }
-
-    const doc = new PDFDocument({ size: "A4", margin: 50 });
-    const stream = fs.createWriteStream(outPath);
-    doc.pipe(stream);
-    doc.fontSize(28).text("СЕРТИФИКАТ ПРИЗНАТЕЛЬНОСТИ", { align: "center" });
-    doc.moveDown(1);
-    doc.fontSize(14).text(`Вручается ${TEACHER_NAME}`, { align: "center" });
-    doc.moveDown(0.5);
-    doc.text(`За вдохновение на уроках русского языка и литературы...`, {
-      align: "center",
-    });
-    doc.moveDown(1);
-    doc.text(`Пусть кот «${CAT_NAME}» поддерживает уют.`, {
-      align: "center",
-      oblique: true,
-    });
-    doc.moveDown(2);
-    const today = new Date().toLocaleDateString("ru-RU");
-    doc.text(`Дата: ${today}`, { align: "right" });
-    doc.moveDown(1);
-    doc.text("Подпись: ____________________", { align: "right" });
-    doc.end();
-    stream.on("finish", resolve);
-    stream.on("error", reject);
-  });
-
-  await ctx.replyWithDocument(
-    {
-      source: path.join(__dirname, "certificate.pdf"),
-      filename: "certificate.pdf",
-    },
-    { caption: "Сертификат (PDF)" }
-  );
+  await ctx.replyWithDocument({ source: pdfPath, filename: "certificate.pdf" });
 }
 
 // Комплексная отправка двух сертификатов
 async function sendCertificates(ctx) {
   await sendPhotoCertificate(ctx); // пришлём картинку
-  await sendPdfCertificate(ctx); // и PDF-версию
+  await sendPlainPdf(ctx); // и PDF-версию
 }
 
 // ===== Команды и действия =====
