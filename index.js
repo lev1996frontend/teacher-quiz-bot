@@ -199,6 +199,41 @@ function shuffle(array) {
   return a;
 }
 
+bot.action("certs", async (ctx) => {
+  try {
+    if (!isAllowed(ctx)) {
+      // всплывающее окно
+      await ctx.answerCbQuery("Доступ к сертификатам ограничен 💌", {
+        show_alert: true,
+      });
+
+      // пишем НАПРЯМУЮ пользователю, даже если нет ctx.chat
+      const userId = ctx.from.id;
+      await ctx.telegram.sendMessage(
+        userId,
+        "Извини, сертификаты доступны только адресату 💌"
+      );
+
+      return; // стоп
+    }
+
+    await ctx.answerCbQuery(); // обычный короткий «тик»
+    await sendCertificates(ctx); // тут твоя логика отправки
+  } catch (e) {
+    console.error("certs handler error:", e);
+    // мягко сообщим в личку, даже если что-то упало
+    const userId = ctx.from?.id;
+    if (userId) {
+      try {
+        await ctx.telegram.sendMessage(
+          userId,
+          "Упс, что-то пошло не так. Попробуй ещё раз."
+        );
+      } catch {}
+    }
+  }
+});
+
 async function showWelcome(ctx) {
   await ctx.reply(
     `Ангелина, Вы любите розы!? Сегодня — не просто день, а повод устроить лёгкую литературную шалость.
@@ -417,24 +452,38 @@ bot.action("again", async (ctx) => {
 });
 
 bot.action("certs", async (ctx) => {
-  // мгновенный ответ на клик
-  await ctx.answerCbQuery();
+  try {
+    if (!isAllowed(ctx)) {
+      // всплывающее окно
+      await ctx.answerCbQuery("Доступ к сертификатам ограничен 💌", {
+        show_alert: true,
+      });
 
-  // точечная проверка доступа
-  if (!isAllowed(ctx)) {
-    // всплывающее предупреждение в Telegram (alert)
-    await ctx.answerCbQuery("Доступ к сертификатам ограничен 💌", {
-      show_alert: true,
-    });
-    // в личке ещё можно дать текстом
-    if (ctx.chat?.type === "private") {
-      await ctx.reply("Извини, сертификаты доступны только адресату.");
+      // пишем НАПРЯМУЮ пользователю, даже если нет ctx.chat
+      const userId = ctx.from.id;
+      await ctx.telegram.sendMessage(
+        userId,
+        "Извини, сертификаты доступны только адресату 💌"
+      );
+
+      return; // стоп
     }
-    return;
-  }
 
-  // всё ок — шлём сертификаты
-  await sendCertificates(ctx);
+    await ctx.answerCbQuery(); // обычный короткий «тик»
+    await sendCertificates(ctx); // тут твоя логика отправки
+  } catch (e) {
+    console.error("certs handler error:", e);
+    // мягко сообщим в личку, даже если что-то упало
+    const userId = ctx.from?.id;
+    if (userId) {
+      try {
+        await ctx.telegram.sendMessage(
+          userId,
+          "Упс, что-то пошло не так. Попробуй ещё раз."
+        );
+      } catch {}
+    }
+  }
 });
 
 bot.action("restart", async (ctx) => {
