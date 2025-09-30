@@ -42,6 +42,22 @@ bot.use(
   })
 );
 
+// ===== ДОСТУП ТОЛЬКО ДЛЯ РАЗРЕШЁННЫХ ID =====
+// В .env / Render: ALLOWED_IDS=452539069  (несколько через запятую)
+const ALLOWED_IDS = new Set(
+  String(process.env.ALLOWED_IDS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => Number(s)) // преобразуем к числу
+);
+bot.use(async (ctx, next) => {
+  if (ctx.from?.id) {
+    console.log("from.id =", ctx.from.id, "allowed =", [...ALLOWED_IDS]);
+  }
+  return next();
+});
+
 // Команды в меню Telegram
 bot.telegram.setMyCommands([
   { command: "start", description: "Начать" },
