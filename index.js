@@ -199,40 +199,13 @@ function shuffle(array) {
   return a;
 }
 
-bot.action("certs", async (ctx) => {
-  try {
-    if (!isAllowed(ctx)) {
-      // всплывающее окно
-      await ctx.answerCbQuery("Доступ к сертификатам ограничен 💌", {
-        show_alert: true,
-      });
+function isAllowed(ctx) {
+  const uid = ctx.from?.id;
+  if (!uid) return false;
+  if (!ALLOWED_IDS || ALLOWED_IDS.size === 0) return true; // пустой список = открыт всем
+  return ALLOWED_IDS.has(uid);
+}
 
-      // пишем НАПРЯМУЮ пользователю, даже если нет ctx.chat
-      const userId = ctx.from.id;
-      await ctx.telegram.sendMessage(
-        userId,
-        "Извини, сертификаты доступны только адресату 💌"
-      );
-
-      return; // стоп
-    }
-
-    await ctx.answerCbQuery(); // обычный короткий «тик»
-    await sendCertificates(ctx); // тут твоя логика отправки
-  } catch (e) {
-    console.error("certs handler error:", e);
-    // мягко сообщим в личку, даже если что-то упало
-    const userId = ctx.from?.id;
-    if (userId) {
-      try {
-        await ctx.telegram.sendMessage(
-          userId,
-          "Упс, что-то пошло не так. Попробуй ещё раз."
-        );
-      } catch {}
-    }
-  }
-});
 
 async function showWelcome(ctx) {
   await ctx.reply(
@@ -451,40 +424,6 @@ bot.action("again", async (ctx) => {
   await showWelcome(ctx);
 });
 
-bot.action("certs", async (ctx) => {
-  try {
-    if (!isAllowed(ctx)) {
-      // всплывающее окно
-      await ctx.answerCbQuery("Доступ к сертификатам ограничен 💌", {
-        show_alert: true,
-      });
-
-      // пишем НАПРЯМУЮ пользователю, даже если нет ctx.chat
-      const userId = ctx.from.id;
-      await ctx.telegram.sendMessage(
-        userId,
-        "Извини, сертификаты доступны только адресату 💌"
-      );
-
-      return; // стоп
-    }
-
-    await ctx.answerCbQuery(); // обычный короткий «тик»
-    await sendCertificates(ctx); // тут твоя логика отправки
-  } catch (e) {
-    console.error("certs handler error:", e);
-    // мягко сообщим в личку, даже если что-то упало
-    const userId = ctx.from?.id;
-    if (userId) {
-      try {
-        await ctx.telegram.sendMessage(
-          userId,
-          "Упс, что-то пошло не так. Попробуй ещё раз."
-        );
-      } catch {}
-    }
-  }
-});
 
 bot.action("restart", async (ctx) => {
   await ctx.answerCbQuery();
@@ -492,6 +431,31 @@ bot.action("restart", async (ctx) => {
   ctx.session.quiz = getQuestions();
   await ctx.reply("Перезапускаю викторину! 🔄");
   await sendQuestion(ctx);
+});
+
+bot.action("certs", async (ctx) => {
+  try {
+    if (!isAllowed(ctx)) {
+      // всплывающее окно
+      await ctx.answerCbQuery("Доступ к сертификатам ограничен 💌", { show_alert: true });
+
+      // пишем НАПРЯМУЮ пользователю, даже если нет ctx.chat
+      const userId = ctx.from.id;
+      await ctx.telegram.sendMessage(userId, "Извини, сертификаты доступны только адресату 💌");
+
+      return; // стоп
+    }
+
+    await ctx.answerCbQuery();      // обычный короткий «тик»
+    await sendCertificates(ctx);    // тут твоя логика отправки
+  } catch (e) {
+    console.error("certs handler error:", e);
+    // мягко сообщим в личку, даже если что-то упало
+    const userId = ctx.from?.id;
+    if (userId) {
+      try { await ctx.telegram.sendMessage(userId, "Упс, что-то пошло не так. Попробуй ещё раз."); } catch {}
+    }
+  }
 });
 
 // Ответ на варианты
