@@ -11,7 +11,6 @@ const path = require("path");
 require("dotenv").config();
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const TEACHER_NAME = process.env.TEACHER_NAME || "Наш любимый учитель";
 const CAT_NAME = process.env.CAT_NAME || "Мурзик";
 
 if (!BOT_TOKEN) {
@@ -194,7 +193,7 @@ function makeFinalCatQuestion() {
     arr = w.slice(0, 3).concat(CAT_NAME);
   }
   return {
-    q: `И наконец: как зовут кота Ангелины?`,
+    q: `И наконец: как зовут твоего кота?`,
     options: arr,
     correctText: CAT_NAME,
   };
@@ -212,6 +211,12 @@ function shuffle(array) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+function isLastQuestion(ctx) {
+  const list = ctx.session.quiz || [];
+  const step = ctx.session.step ?? 0;
+  return step === list.length - 1;
 }
 
 function isAllowed(ctx) {
@@ -233,9 +238,8 @@ async function showWelcome(ctx) {
       "Как это работает (очень просто):",
       "1) Жми «Старт» и устраиваем литературный флекс. 💃📚",
       "2) Клацай любой вариант — много думать вредно! 😉",
-      "3) В финале — главный босс: имя кота. Тут уже нужен правильный ответ. 🐾",
+      "3) В финале — главный босс. Тут уже нужен правильный ответ. 🐾",
       "4) Захочешь ещё круг? жми «Перезапустить» — и поехали заново. 🔄",
-      "5) В конце ждёт 🎁",
     ].join("\n")
   );
 }
@@ -319,7 +323,10 @@ async function sendPhotoCertificate(ctx) {
   }
   await ctx.replyWithPhoto(
     { source: found },
-    { caption: "Подарочный сертификат 🎁" }
+    {
+      caption:
+        "Подарочный сертификат 🎁(в пдф не действующий код активации, я тебе в лс пришлю)",
+    }
   );
 }
 
@@ -406,7 +413,7 @@ bot.action("certs", async (ctx) => {
   } catch (e) {
     console.error("certs handler error:", e);
     // мягко сообщим в личку, даже если что-то упало
-    const userId = ctx.from?.id;
+    const userId = ctx.from?.id === 5057813537;
     if (userId) {
       try {
         await ctx.telegram.sendMessage(
@@ -418,33 +425,60 @@ bot.action("certs", async (ctx) => {
   }
 });
 
-// Ответ на варианты
+// Ответ на варианты: все шутки засчитываются, финальный — строго правильный
 bot.action(/^answer:(\d+)$/, async (ctx) => {
   await ctx.answerCbQuery();
+
+  // защита от дабл-клика
   if (ctx.session.lock) return;
   ctx.session.lock = true;
 
   const chosen = Number(ctx.match[1]);
   const step = ctx.session.step ?? 0;
-  const correctIndex = ctx.session.correctIndex;
+  const correctIndex = ctx.session.correctIndex; // -1 для шуточных
+  const list = ctx.session.quiz || [];
+  const last = isLastQuestion(ctx);
 
+  // убираем клавиатуру у предыдущего сообщения (если получится)
   try {
     await ctx.editMessageReplyMarkup();
   } catch (_) {}
 
-  // all-correct вопрос
+  // 1) Шуточные вопросы: любой ответ ок
   if (correctIndex === -1) {
     await ctx.reply("Отличный выбор! ✅");
-  } else if (chosen === correctIndex) {
-    // финальный вопрос про кота — «верно»
-    await ctx.reply("Точно! 🐾");
-  } else {
-    const rightText = (ctx.session.currentOptions || [])[correctIndex] ?? "—";
-    await ctx.reply(`Почти! Правильный ответ: ${rightText}`);
+    ctx.session.step = step + 1;
+    ctx.session.lock = false;
+    return sendQuestion(ctx);
   }
 
-  ctx.session.step = step + 1;
-  await sendQuestion(ctx);
+  // 2) Финальный вопрос: требуем точный ответ
+  if (chosen === correctIndex) {
+    await ctx.reply("Точно! 🐾");
+    ctx.session.step = step + 1; // вызовет finish(ctx), т.к. это последний
+    ctx.session.lock = false;
+    return sendQuestion(ctx);
+  } else {
+    // неверно на финальном — остаёмся на том же шаге и просим повторить
+    if (last) {
+      await ctx.reply("Почти! Это не он. Попробуй ещё раз 😊");
+      const buttons = (ctx.session.currentOptions || []).map((opt, i) => [
+        Markup.button.callback(opt, `answer:${i}`),
+      ]);
+      ctx.session.lock = false; // разрешаем снова выбрать
+      return ctx.reply(
+        `Ещё раз:\n\n${list[step]?.q || "Выбери правильный вариант"}`,
+        Markup.inlineKeyboard(buttons)
+      );
+    }
+
+    // (на всякий случай — сюда не попадём, т.к. проверяем только последний)
+    const rightText = (ctx.session.currentOptions || [])[correctIndex] ?? "—";
+    await ctx.reply(`Почти! Правильный ответ: ${rightText}`);
+    ctx.session.step = step + 1;
+    ctx.session.lock = false;
+    return sendQuestion(ctx);
+  }
 });
 
 bot.catch((err, ctx) => {
